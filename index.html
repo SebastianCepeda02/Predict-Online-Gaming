@@ -189,7 +189,7 @@
     // Obtener ID del jugador
     const playerId = row['PlayerID'] !== undefined ? row['PlayerID'] : `Jugador #${i + 1}`;
 
-    // Obtener valores categóricos para la codificación One-Hot
+    // Obtener valores categóricos para One-Hot Encoding
     const gender = String(row['Gender'] || '').trim();
     const location = String(row['Location'] || '').trim();
     const gameGenre = String(row['GameGenre'] || '').trim();
@@ -225,31 +225,18 @@
     ];
 
     try {
-      // Crear Tensor [1, 17]
       const inputTensor = new ort.Tensor('float32', Float32Array.from(inputValues), [1, 17]);
       const feeds = { float_input: inputTensor };
-      
-      // Ejecutar la inferencia
-      const outputMap = await session.run(feeds);
 
-      // Extraer de forma segura el label predicho
-      let rawPrediction;
-      if (outputMap.label && outputMap.label.data) {
-        rawPrediction = outputMap.label.data[0];
-      } else if (outputMap.output_label && outputMap.output_label.data) {
-        rawPrediction = outputMap.output_label.data[0];
-      } else {
-        const keys = Object.keys(outputMap);
-        rawPrediction = outputMap[keys[0]].data ? outputMap[keys[0]].data[0] : 0;
-      }
+      // Pasamos ['label'] para que ONNX ignora la salida de probabilidades
+      const outputMap = await session.run(feeds, ['label']);
 
-      // Convertir BigInt o número a la etiqueta de clase
+      let rawPrediction = outputMap.label.data[0];
       let predictedClass = typeof rawPrediction === 'bigint' ? Number(rawPrediction) : rawPrediction;
       predictedClass = labelMapping[predictedClass] !== undefined ? labelMapping[predictedClass] : predictedClass;
 
       const strategy = strategyMapping[predictedClass] || "Sin estrategia definida";
 
-      // Renderizar fila en la tabla
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><strong>${playerId}</strong></td>
