@@ -3,84 +3,167 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Segmentación de Jugadores y Monetización</title>
-  <!-- ONNX Runtime Web -->
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
-  <!-- PapaParse para leer archivos CSV -->
+  <title>Predict Online Gaming - Clasificación y Monetización</title>
+  
+  <!-- Usamos ort.min.js en el mismo repositorio para evitar bloqueos de la CDN -->
+  <script src="./ort.min.js"></script>
+  <!-- PapaParse para la lectura eficiente de archivos CSV -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 
   <style>
-    body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f7f6; color: #333; }
-    h1 { color: #2c3e50; }
-    .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-    th { background-color: #3498db; color: white; }
-    .status { font-weight: bold; padding: 10px; border-radius: 4px; margin-top: 10px; display: inline-block; }
-    .loading { background-color: #f39c12; color: white; }
-    .ready { background-color: #2ecc71; color: white; }
-    .High { color: #27ae60; font-weight: bold; }
-    .Medium { color: #d35400; font-weight: bold; }
-    .Low { color: #c0392b; font-weight: bold; }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+      margin: 0; 
+      padding: 30px; 
+      background-color: #f4f7f6; 
+      color: #333; 
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1 { 
+      color: #2c3e50; 
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .card { 
+      background: #ffffff; 
+      padding: 25px; 
+      border-radius: 10px; 
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+      margin-bottom: 25px; 
+    }
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      margin-top: 15px; 
+    }
+    th, td { 
+      border: 1px solid #e2e8f0; 
+      padding: 12px; 
+      text-align: left; 
+    }
+    th { 
+      background-color: #3498db; 
+      color: white; 
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background-color: #f8fafc;
+    }
+    .status { 
+      font-weight: bold; 
+      padding: 12px 15px; 
+      border-radius: 6px; 
+      display: inline-block; 
+      margin-top: 5px;
+    }
+    .loading { 
+      background-color: #fef3c7; 
+      color: #d97706; 
+      border: 1px solid #fcd34d;
+    }
+    .ready { 
+      background-color: #d1fae5; 
+      color: #059669; 
+      border: 1px solid #6ee7b7;
+    }
+    .error {
+      background-color: #fee2e2;
+      color: #dc2626;
+      border: 1px solid #fca5a5;
+    }
+    .High { 
+      color: #059669; 
+      font-weight: bold; 
+    }
+    .Medium { 
+      color: #d97706; 
+      font-weight: bold; 
+    }
+    .Low { 
+      color: #dc2626; 
+      font-weight: bold; 
+    }
+    input[type="file"] {
+      padding: 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      width: 100%;
+      box-sizing: border-box;
+      background-color: #f8fafc;
+    }
   </style>
 </head>
 <body>
 
-  <h1>🎮 Clasificador de Jugadores y Monetización (Capstone)</h1>
+  <div class="container">
+    <h1>🎮 Predict Online Gaming - Monetización de Jugadores</h1>
 
-  <div class="card">
-    <h3>Estado del Modelo ONNX:</h3>
-    <div id="status" class="status loading">Cargando modelo...</div>
-  </div>
+    <div class="card">
+      <h3>Estado del Modelo ONNX:</h3>
+      <div id="status" class="status loading">Inicializando motor y cargando modelo...</div>
+    </div>
 
-  <div class="card">
-    <h3>Cargar archivo CSV con datos de jugadores</h3>
-    <input type="file" id="csvFileInput" accept=".csv" disabled />
-    <p><small>* Asegúrate de que el CSV tenga las mismas características/columnas usadas en el entrenamiento.</small></p>
-  </div>
+    <div class="card">
+      <h3>Cargar archivo CSV de prueba</h3>
+      <input type="file" id="csvFileInput" accept=".csv" disabled />
+      <p style="color: #64748b; font-size: 0.9em; margin-top: 8px;">
+        * El CSV debe contener la columna <b>PlayerID</b> y las 11 características métricas.
+      </p>
+    </div>
 
-  <div class="card" id="resultsContainer" style="display: none;">
-    <h3>Resultados de la Clasificación</h3>
-    <table id="resultsTable">
-      <thead>
-        <tr>
-          <th>Fila / ID</th>
-          <th>Predicción (Engagement)</th>
-          <th>Estrategia de Monetización Recomendada</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <div class="card" id="resultsContainer" style="display: none;">
+      <h3>Resultados de Clasificación y Estrategia</h3>
+      <table id="resultsTable">
+        <thead>
+          <tr>
+            <th>Player ID</th>
+            <th>Nivel de Engagement Predicho</th>
+            <th>Estrategia de Monetización Recomendada</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 
   <script>
     let session;
 
-    // Mapas de salida (Ajusta los nombres según las etiquetas de tu y_test)
+    // Ajuste de opciones de WebAssembly para evitar problemas de almacenamiento local en el navegador
+    if (window.ort) {
+      ort.env.wasm.numThreads = 1;
+      ort.env.wasm.proxy = false;
+    }
+
+    // Mapeo de resultados y estrategias de monetización
     const labelMapping = { 0: "Low", 1: "Medium", 2: "High" };
     const strategyMapping = {
       "High": "Suscripción Pass VIP / Skins Exclusivas / Eventos Limitados",
       "Medium": "Descuentos en Packs / Ofertas de tiempo limitado / Microtransacciones",
-      "Low": "Recompensas Diarias / Anuncios Bonificados (Rewarded Ads) para Retención"
+      "Low": "Recompensas Diarias por Ingreso / Anuncios Bonificados (Rewarded Ads)"
     };
 
     // 1. Cargar la sesión del modelo ONNX
     async function loadModel() {
+      const statusDiv = document.getElementById('status');
       try {
         session = await ort.InferenceSession.create('./player_classifier.onnx');
-        const statusDiv = document.getElementById('status');
-        statusDiv.innerText = "¡Modelo cargado y listo para inferencias!";
+        statusDiv.innerText = "¡Modelo cargado exitosamente y listo para clasificar!";
         statusDiv.className = "status ready";
         document.getElementById('csvFileInput').disabled = false;
       } catch (e) {
         console.error("Error al cargar el modelo ONNX:", e);
-        document.getElementById('status').innerText = "Error cargando el modelo. Revisa la consola.";
+        statusDiv.innerText = "Error al cargar el modelo ONNX. Asegúrate de tener 'player_classifier.onnx' en el directorio raíz.";
+        statusDiv.className = "status error";
       }
     }
 
     loadModel();
 
-    // 2. Manejar la carga del CSV
+    // 2. Manejar la carga del archivo CSV
     document.getElementById('csvFileInput').addEventListener('change', function(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -95,41 +178,48 @@
       });
     });
 
-    // 3. Inferencia fila por fila o por lotes
+    // 3. Procesar datos y ejecutar inferencias
     async function processPredictions(data) {
       const tbody = document.querySelector('#resultsTable tbody');
       tbody.innerHTML = '';
 
+      // Lista exacta de las 11 columnas numéricas requeridas por el modelo
+      const featureKeys = [
+        'Age', 'Gender', 'Location', 'GameGenre', 'PlayTimeHours', 
+        'InGamePurchases', 'GameDifficulty', 'SessionsPerWeek', 
+        'AvgSessionDurationMinutes', 'PlayerLevel', 'AchievementsUnlocked'
+      ];
+
       for (let i = 0; i < data.length; i++) {
         const row = data[i];
         
-        // Convertir el objeto de la fila en un arreglo de valores numéricos para el modelo
-        // Excluimos columnas no numéricas o identificadores si los hay (ej. 'PlayerID')
-        const inputValues = Object.values(row).filter(val => typeof val === 'number');
+        // Obtener el ID del jugador o asignar uno por defecto
+        const playerId = row['PlayerID'] !== undefined ? row['PlayerID'] : `Jugador #${i + 1}`;
+
+        // Mapear exactamente las 11 variables de entrada
+        const inputValues = featureKeys.map(key => Number(row[key]) || 0);
 
         try {
-          // Crear Tensor con los datos de entrada
+          // Crear Tensor con dimensión [1, 11]
           const inputTensor = new ort.Tensor('float32', Float32Array.from(inputValues), [1, inputValues.length]);
           
-          // Ejecutar la inferencia con el nombre de la entrada configurado en Python ('float_input')
+          // Ejecutar la inferencia
           const feeds = { float_input: inputTensor };
           const outputMap = await session.run(feeds);
 
-          // Obtener el resultado devuelto por Scikit-Learn / ONNX
-          // En skl2onnx la salida de clasificación suele dar 'label' o la probabilidad
+          // Extraer la etiqueta predicha
           let predictedClass = outputMap.label ? outputMap.label.data[0] : 0;
           
-          // Convertir índice numérico a texto si aplica
           if (typeof predictedClass === 'bigint' || typeof predictedClass === 'number') {
             predictedClass = labelMapping[predictedClass] || predictedClass;
           }
 
-          const strategy = strategyMapping[predictedClass] || "Sin estrategia asignada";
+          const strategy = strategyMapping[predictedClass] || "Sin estrategia definida";
 
-          // Renderizar resultados en la tabla
+          // Insertar fila en la tabla
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>Jugador #${i + 1}</td>
+            <td><strong>${playerId}</strong></td>
             <td class="${predictedClass}">${predictedClass}</td>
             <td>${strategy}</td>
           `;
