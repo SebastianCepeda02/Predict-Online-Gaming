@@ -110,7 +110,7 @@
       <h3>Cargar archivo CSV de prueba</h3>
       <input type="file" id="csvFileInput" accept=".csv" disabled />
       <p style="color: #64748b; font-size: 0.9em; margin-top: 8px;">
-        * El CSV debe contener la columna <b>PlayerID</b> y las 11 características métricas.
+        * El CSV debe contener la columna <b>PlayerID</b> y las métricas del jugador.
       </p>
     </div>
 
@@ -132,7 +132,7 @@
   <script>
     let session;
 
-    // Ajuste de opciones de WebAssembly para evitar problemas de almacenamiento local en el navegador
+    // Opciones de WebAssembly para evitar problemas de almacenamiento local en el navegador
     if (window.ort) {
       ort.env.wasm.numThreads = 1;
       ort.env.wasm.proxy = false;
@@ -178,24 +178,26 @@
       });
     });
 
-    // 3. Procesar datos y ejecutar inferencias
-        async function processPredictions(data) {
+    // 3. Procesar datos y ejecutar inferencias con One-Hot Encoding automático
+    async function processPredictions(data) {
       const tbody = document.querySelector('#resultsTable tbody');
       tbody.innerHTML = '';
 
       for (let i = 0; i < data.length; i++) {
         const row = data[i];
+        
+        // Obtener ID del jugador
         const playerId = row['PlayerID'] !== undefined ? row['PlayerID'] : `Jugador #${i + 1}`;
 
-        // 1. Obtener valores categóricos del CSV original
+        // Obtener valores categóricos para la codificación
         const gender = String(row['Gender'] || '').trim();
         const location = String(row['Location'] || '').trim();
         const gameGenre = String(row['GameGenre'] || '').trim();
         const gameDifficulty = String(row['GameDifficulty'] || '').trim();
 
-        // 2. Construir el arreglo de 17 características en el ORDEN EXACTO del modelo:
+        // Arreglo con las 17 características en el ORDEN EXACTO en que fue entrenado el modelo
         const inputValues = [
-          // Numéricas directas
+          // 1-7: Métricas Numéricas Directas
           Number(row['Age']) || 0,
           Number(row['PlayTimeHours']) || 0,
           Number(row['InGamePurchases']) || 0,
@@ -204,21 +206,21 @@
           Number(row['PlayerLevel']) || 0,
           Number(row['AchievementsUnlocked']) || 0,
 
-          // Gender_Male
+          // 8: Gender_Male
           (gender === 'Male' || gender === '1') ? 1 : 0,
 
-          // Location (Europe, Other, USA)
+          // 9-11: Location (Europe, Other, USA)
           (location === 'Europe' || location === '1') ? 1 : 0,
           (location === 'Other' || location === '2') ? 1 : 0,
           (location === 'USA' || location === '3') ? 1 : 0,
 
-          // GameGenre (RPG, Simulation, Sports, Strategy)
+          // 12-15: GameGenre (RPG, Simulation, Sports, Strategy)
           (gameGenre === 'RPG' || gameGenre === '1') ? 1 : 0,
           (gameGenre === 'Simulation' || gameGenre === '2') ? 1 : 0,
           (gameGenre === 'Sports' || gameGenre === '3') ? 1 : 0,
           (gameGenre === 'Strategy' || gameGenre === '4') ? 1 : 0,
 
-          // GameDifficulty (Hard, Medium)
+          // 16-17: GameDifficulty (Hard, Medium)
           (gameDifficulty === 'Hard' || gameDifficulty === '1') ? 1 : 0,
           (gameDifficulty === 'Medium' || gameDifficulty === '2') ? 1 : 0
         ];
@@ -227,9 +229,11 @@
           // Crear Tensor con dimensión [1, 17]
           const inputTensor = new ort.Tensor('float32', Float32Array.from(inputValues), [1, 17]);
           
+          // Ejecutar la inferencia
           const feeds = { float_input: inputTensor };
           const outputMap = await session.run(feeds);
 
+          // Extraer la etiqueta predicha
           let predictedClass = outputMap.label ? outputMap.label.data[0] : 0;
           
           if (typeof predictedClass === 'bigint' || typeof predictedClass === 'number') {
@@ -238,6 +242,7 @@
 
           const strategy = strategyMapping[predictedClass] || "Sin estrategia definida";
 
+          // Insertar fila en la tabla
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td><strong>${playerId}</strong></td>
