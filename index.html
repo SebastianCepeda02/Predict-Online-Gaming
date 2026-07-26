@@ -180,84 +180,91 @@
 
     // 3. Procesar datos y ejecutar inferencias con One-Hot Encoding automático
     async function processPredictions(data) {
-      const tbody = document.querySelector('#resultsTable tbody');
-      tbody.innerHTML = '';
+  const tbody = document.querySelector('#resultsTable tbody');
+  tbody.innerHTML = '';
 
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i];
-        
-        // Obtener ID del jugador
-        const playerId = row['PlayerID'] !== undefined ? row['PlayerID'] : `Jugador #${i + 1}`;
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    
+    // Obtener ID del jugador
+    const playerId = row['PlayerID'] !== undefined ? row['PlayerID'] : `Jugador #${i + 1}`;
 
-        // Obtener valores categóricos para la codificación
-        const gender = String(row['Gender'] || '').trim();
-        const location = String(row['Location'] || '').trim();
-        const gameGenre = String(row['GameGenre'] || '').trim();
-        const gameDifficulty = String(row['GameDifficulty'] || '').trim();
+    // Obtener valores categóricos para la codificación One-Hot
+    const gender = String(row['Gender'] || '').trim();
+    const location = String(row['Location'] || '').trim();
+    const gameGenre = String(row['GameGenre'] || '').trim();
+    const gameDifficulty = String(row['GameDifficulty'] || '').trim();
 
-        // Arreglo con las 17 características en el ORDEN EXACTO en que fue entrenado el modelo
-        const inputValues = [
-          // 1-7: Métricas Numéricas Directas
-          Number(row['Age']) || 0,
-          Number(row['PlayTimeHours']) || 0,
-          Number(row['InGamePurchases']) || 0,
-          Number(row['SessionsPerWeek']) || 0,
-          Number(row['AvgSessionDurationMinutes']) || 0,
-          Number(row['PlayerLevel']) || 0,
-          Number(row['AchievementsUnlocked']) || 0,
+    // Arreglo con las 17 características en el ORDEN EXACTO del modelo
+    const inputValues = [
+      Number(row['Age']) || 0,
+      Number(row['PlayTimeHours']) || 0,
+      Number(row['InGamePurchases']) || 0,
+      Number(row['SessionsPerWeek']) || 0,
+      Number(row['AvgSessionDurationMinutes']) || 0,
+      Number(row['PlayerLevel']) || 0,
+      Number(row['AchievementsUnlocked']) || 0,
 
-          // 8: Gender_Male
-          (gender === 'Male' || gender === '1') ? 1 : 0,
+      // Gender_Male
+      (gender === 'Male' || gender === '1') ? 1 : 0,
 
-          // 9-11: Location (Europe, Other, USA)
-          (location === 'Europe' || location === '1') ? 1 : 0,
-          (location === 'Other' || location === '2') ? 1 : 0,
-          (location === 'USA' || location === '3') ? 1 : 0,
+      // Location (Europe, Other, USA)
+      (location === 'Europe' || location === '1') ? 1 : 0,
+      (location === 'Other' || location === '2') ? 1 : 0,
+      (location === 'USA' || location === '3') ? 1 : 0,
 
-          // 12-15: GameGenre (RPG, Simulation, Sports, Strategy)
-          (gameGenre === 'RPG' || gameGenre === '1') ? 1 : 0,
-          (gameGenre === 'Simulation' || gameGenre === '2') ? 1 : 0,
-          (gameGenre === 'Sports' || gameGenre === '3') ? 1 : 0,
-          (gameGenre === 'Strategy' || gameGenre === '4') ? 1 : 0,
+      // GameGenre (RPG, Simulation, Sports, Strategy)
+      (gameGenre === 'RPG' || gameGenre === '1') ? 1 : 0,
+      (gameGenre === 'Simulation' || gameGenre === '2') ? 1 : 0,
+      (gameGenre === 'Sports' || gameGenre === '3') ? 1 : 0,
+      (gameGenre === 'Strategy' || gameGenre === '4') ? 1 : 0,
 
-          // 16-17: GameDifficulty (Hard, Medium)
-          (gameDifficulty === 'Hard' || gameDifficulty === '1') ? 1 : 0,
-          (gameDifficulty === 'Medium' || gameDifficulty === '2') ? 1 : 0
-        ];
+      // GameDifficulty (Hard, Medium)
+      (gameDifficulty === 'Hard' || gameDifficulty === '1') ? 1 : 0,
+      (gameDifficulty === 'Medium' || gameDifficulty === '2') ? 1 : 0
+    ];
 
-        try {
-          // Crear Tensor con dimensión [1, 17]
-          const inputTensor = new ort.Tensor('float32', Float32Array.from(inputValues), [1, 17]);
-          
-          // Ejecutar la inferencia
-          const feeds = { float_input: inputTensor };
-          const outputMap = await session.run(feeds);
+    try {
+      // Crear Tensor [1, 17]
+      const inputTensor = new ort.Tensor('float32', Float32Array.from(inputValues), [1, 17]);
+      const feeds = { float_input: inputTensor };
+      
+      // Ejecutar la inferencia
+      const outputMap = await session.run(feeds);
 
-          // Extraer la etiqueta predicha
-          let predictedClass = outputMap.label ? outputMap.label.data[0] : 0;
-          
-          if (typeof predictedClass === 'bigint' || typeof predictedClass === 'number') {
-            predictedClass = labelMapping[predictedClass] || predictedClass;
-          }
-
-          const strategy = strategyMapping[predictedClass] || "Sin estrategia definida";
-
-          // Insertar fila en la tabla
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td><strong>${playerId}</strong></td>
-            <td class="${predictedClass}">${predictedClass}</td>
-            <td>${strategy}</td>
-          `;
-          tbody.appendChild(tr);
-
-        } catch (err) {
-          console.error(`Error procesando la fila ${i + 1}:`, err);
-        }
+      // Extraer de forma segura el label predicho
+      let rawPrediction;
+      if (outputMap.label && outputMap.label.data) {
+        rawPrediction = outputMap.label.data[0];
+      } else if (outputMap.output_label && outputMap.output_label.data) {
+        rawPrediction = outputMap.output_label.data[0];
+      } else {
+        const keys = Object.keys(outputMap);
+        rawPrediction = outputMap[keys[0]].data ? outputMap[keys[0]].data[0] : 0;
       }
 
-      document.getElementById('resultsContainer').style.display = 'block';
+      // Convertir BigInt o número a la etiqueta de clase
+      let predictedClass = typeof rawPrediction === 'bigint' ? Number(rawPrediction) : rawPrediction;
+      predictedClass = labelMapping[predictedClass] !== undefined ? labelMapping[predictedClass] : predictedClass;
+
+      const strategy = strategyMapping[predictedClass] || "Sin estrategia definida";
+
+      // Renderizar fila en la tabla
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${playerId}</strong></td>
+        <td class="${predictedClass}">${predictedClass}</td>
+        <td>${strategy}</td>
+      `;
+      tbody.appendChild(tr);
+
+    } catch (err) {
+      console.error(`Error procesando la fila ${i + 1}:`, err);
     }
+  }
+
+  document.getElementById('resultsContainer').style.display = 'block';
+}
   </script>
 
 </body>
