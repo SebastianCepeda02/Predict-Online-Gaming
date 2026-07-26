@@ -179,35 +179,57 @@
     });
 
     // 3. Procesar datos y ejecutar inferencias
-    async function processPredictions(data) {
+        async function processPredictions(data) {
       const tbody = document.querySelector('#resultsTable tbody');
       tbody.innerHTML = '';
 
-      // Lista exacta de las 11 columnas numéricas requeridas por el modelo
-      const featureKeys = [
-        'Age', 'Gender', 'Location', 'GameGenre', 'PlayTimeHours', 
-        'InGamePurchases', 'GameDifficulty', 'SessionsPerWeek', 
-        'AvgSessionDurationMinutes', 'PlayerLevel', 'AchievementsUnlocked'
-      ];
-
       for (let i = 0; i < data.length; i++) {
         const row = data[i];
-        
-        // Obtener el ID del jugador o asignar uno por defecto
         const playerId = row['PlayerID'] !== undefined ? row['PlayerID'] : `Jugador #${i + 1}`;
 
-        // Mapear exactamente las 11 variables de entrada
-        const inputValues = featureKeys.map(key => Number(row[key]) || 0);
+        // 1. Obtener valores categóricos del CSV original
+        const gender = String(row['Gender'] || '').trim();
+        const location = String(row['Location'] || '').trim();
+        const gameGenre = String(row['GameGenre'] || '').trim();
+        const gameDifficulty = String(row['GameDifficulty'] || '').trim();
+
+        // 2. Construir el arreglo de 17 características en el ORDEN EXACTO del modelo:
+        const inputValues = [
+          // Numéricas directas
+          Number(row['Age']) || 0,
+          Number(row['PlayTimeHours']) || 0,
+          Number(row['InGamePurchases']) || 0,
+          Number(row['SessionsPerWeek']) || 0,
+          Number(row['AvgSessionDurationMinutes']) || 0,
+          Number(row['PlayerLevel']) || 0,
+          Number(row['AchievementsUnlocked']) || 0,
+
+          // Gender_Male
+          (gender === 'Male' || gender === '1') ? 1 : 0,
+
+          // Location (Europe, Other, USA)
+          (location === 'Europe' || location === '1') ? 1 : 0,
+          (location === 'Other' || location === '2') ? 1 : 0,
+          (location === 'USA' || location === '3') ? 1 : 0,
+
+          // GameGenre (RPG, Simulation, Sports, Strategy)
+          (gameGenre === 'RPG' || gameGenre === '1') ? 1 : 0,
+          (gameGenre === 'Simulation' || gameGenre === '2') ? 1 : 0,
+          (gameGenre === 'Sports' || gameGenre === '3') ? 1 : 0,
+          (gameGenre === 'Strategy' || gameGenre === '4') ? 1 : 0,
+
+          // GameDifficulty (Hard, Medium)
+          (gameDifficulty === 'Hard' || gameDifficulty === '1') ? 1 : 0,
+          (gameDifficulty === 'Medium' || gameDifficulty === '2') ? 1 : 0
+        ];
 
         try {
-          // Crear Tensor con dimensión [1, 11]
-          const inputTensor = new ort.Tensor('float32', Float32Array.from(inputValues), [1, inputValues.length]);
+          // Crear Tensor con dimensión [1, 17]
+          const inputTensor = new ort.Tensor('float32', Float32Array.from(inputValues), [1, 17]);
           
-          // Ejecutar la inferencia
           const feeds = { float_input: inputTensor };
           const outputMap = await session.run(feeds);
 
-          // Extraer la etiqueta predicha
           let predictedClass = outputMap.label ? outputMap.label.data[0] : 0;
           
           if (typeof predictedClass === 'bigint' || typeof predictedClass === 'number') {
@@ -216,7 +238,6 @@
 
           const strategy = strategyMapping[predictedClass] || "Sin estrategia definida";
 
-          // Insertar fila en la tabla
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td><strong>${playerId}</strong></td>
