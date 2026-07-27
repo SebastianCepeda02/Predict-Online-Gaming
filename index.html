@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Predict Online Gaming - Clasificación y Monetización</title>
   
-  <!-- Usa la CDN oficial -->
+  <!-- Carga de la CDN oficial de ONNX Runtime Web -->
   <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
   <!-- PapaParse para la lectura eficiente de archivos CSV -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -110,7 +110,7 @@
       <h3>Cargar archivo CSV de prueba</h3>
       <input type="file" id="csvFileInput" accept=".csv" disabled />
       <p style="color: #64748b; font-size: 0.9em; margin-top: 8px;">
-        * El CSV debe contener la columna <b>PlayerID</b> y las métricas del jugador.
+        * El CSV debe contener la columna <b>PlayerID</b> y las métricas numéricas/categóricas del jugador.
       </p>
     </div>
 
@@ -131,14 +131,16 @@
 
   <script>
     let session;
+    let inputName = null;
+    let labelOutputName = null;
 
-    // Opciones de WebAssembly para evitar problemas de almacenamiento local en el navegador
+    // Configuración de WebAssembly para evitar problemas de proxy o hilos en navegadores
     if (window.ort) {
       ort.env.wasm.numThreads = 1;
       ort.env.wasm.proxy = false;
     }
 
-    // Mapeo de resultados y estrategias de monetización
+    // Mapeos de clases y estrategias
     const labelMapping = { 0: "Low", 1: "Medium", 2: "High" };
     const strategyMapping = {
       "High": "Suscripción Pass VIP / Skins Exclusivas / Eventos Limitados",
@@ -146,111 +148,129 @@
       "Low": "Recompensas Diarias por Ingreso / Anuncios Bonificados (Rewarded Ads)"
     };
 
-    let session;
-let labelOutputName = null;
+    // 1. Cargar el modelo e inspeccionar los nombres de entradas/salidas
+    async function loadModel() {
+      const statusDiv = document.getElementById('status');
+      try {
+        session = await ort.InferenceSession.create('./player_classifier.onnx');
+        
+        // Obtener el nombre del nodo de entrada (ejemplo: 'float_input')
+        inputName = session.inputNames[0];
+        
+        // Identificar la salida que corresponde a las etiquetas/clases predichas
+        labelOutputName = session.outputNames.find(name => !name.includes('prob')) || session.outputNames[0];
 
-// 1. Cargar el modelo e identificar el nombre real de la salida de clase
-async function loadModel() {
-  const statusDiv = document.getElementById('status');
-  try {
-    session = await ort.InferenceSession.create('./player_classifier.onnx');
-    
-    // Inspeccionar las salidas registradas en el archivo ONNX
-    console.log("Nombres de salida en el modelo ONNX:", session.outputNames);
-    
-    // La primera salida casi siempre es el label/clasificación (ej: 'label' o 'output_label')
-    // Filtramos para evitar seleccionar la de probabilidades
-    labelOutputName = session.outputNames.find(name => !name.includes('prob')) || session.outputNames[0];
-    console.log("Nombre de salida de etiqueta seleccionado:", labelOutputName);
+        console.log("Entrada detectada:", inputName);
+        console.log("Salida de etiqueta seleccionada:", labelOutputName);
 
-    statusDiv.innerText = "¡Modelo cargado exitosamente y listo para clasificar!";
-    statusDiv.className = "status ready";
-    document.getElementById('csvFileInput').disabled = false;
-  } catch (e) {
-    console.error("Error al cargar el modelo ONNX:", e);
-    statusDiv.innerText = "Error al cargar el modelo ONNX. Asegúrate de tener 'player_classifier.onnx' en el directorio raíz.";
-    statusDiv.className = "status error";
-  }
-}
-
-// 2. Procesar las predicciones solicitando SOLO el tensor de etiqueta
-async function processPredictions(data) {
-  const tbody = document.querySelector('#resultsTable tbody');
-  tbody.innerHTML = '';
-
-  for (let i = 0; i < data.length; i++) {
-    const row = data[i];
-    
-    const playerId = row['PlayerID'] !== undefined ? row['PlayerID'] : `Jugador #${i + 1}`;
-
-    const gender = String(row['Gender'] || '').trim();
-    const location = String(row['Location'] || '').trim();
-    const gameGenre = String(row['GameGenre'] || '').trim();
-    const gameDifficulty = String(row['GameDifficulty'] || '').trim();
-
-    // 17 características en el orden del modelo One-Hot
-    const inputValues = [
-      Number(row['Age']) || 0,
-      Number(row['PlayTimeHours']) || 0,
-      Number(row['InGamePurchases']) || 0,
-      Number(row['SessionsPerWeek']) || 0,
-      Number(row['AvgSessionDurationMinutes']) || 0,
-      Number(row['PlayerLevel']) || 0,
-      Number(row['AchievementsUnlocked']) || 0,
-
-      // Gender_Male
-      (gender === 'Male' || gender === '1') ? 1 : 0,
-
-      // Location (Europe, Other, USA)
-      (location === 'Europe' || location === '1') ? 1 : 0,
-      (location === 'Other' || location === '2') ? 1 : 0,
-      (location === 'USA' || location === '3') ? 1 : 0,
-
-      // GameGenre (RPG, Simulation, Sports, Strategy)
-      (gameGenre === 'RPG' || gameGenre === '1') ? 1 : 0,
-      (gameGenre === 'Simulation' || gameGenre === '2') ? 1 : 0,
-      (gameGenre === 'Sports' || gameGenre === '3') ? 1 : 0,
-      (gameGenre === 'Strategy' || gameGenre === '4') ? 1 : 0,
-
-      // GameDifficulty (Hard, Medium)
-      (gameDifficulty === 'Hard' || gameDifficulty === '1') ? 1 : 0,
-      (gameDifficulty === 'Medium' || gameDifficulty === '2') ? 1 : 0
-    ];
-
-    try {
-      const inputTensor = new ort.Tensor('float32', Float32Array.from(inputValues), [1, 17]);
-      
-      // Pasar el nombre de entrada detectado en la sesión (suele ser 'float_input')
-      const inputName = session.inputNames[0];
-      const feeds = {};
-      feeds[inputName] = inputTensor;
-
-      // Solicitamos ÚNICAMENTE el nombre de la salida de etiquetas que descubrimos al cargar
-      const outputMap = await session.run(feeds, [labelOutputName]);
-
-      const labelTensor = outputMap[labelOutputName];
-      let rawPrediction = labelTensor.data[0];
-
-      let predictedClass = typeof rawPrediction === 'bigint' ? Number(rawPrediction) : rawPrediction;
-      predictedClass = labelMapping[predictedClass] !== undefined ? labelMapping[predictedClass] : predictedClass;
-
-      const strategy = strategyMapping[predictedClass] || "Sin estrategia definida";
-
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><strong>${playerId}</strong></td>
-        <td class="${predictedClass}">${predictedClass}</td>
-        <td>${strategy}</td>
-      `;
-      tbody.appendChild(tr);
-
-    } catch (err) {
-      console.error(`Error procesando la fila ${i + 1}:`, err);
+        statusDiv.innerText = "¡Modelo cargado exitosamente y listo para clasificar!";
+        statusDiv.className = "status ready";
+        document.getElementById('csvFileInput').disabled = false;
+      } catch (e) {
+        console.error("Error al cargar el modelo ONNX:", e);
+        statusDiv.innerText = "Error al cargar el modelo ONNX. Asegúrate de tener 'player_classifier.onnx' en la raíz del repositorio.";
+        statusDiv.className = "status error";
+      }
     }
-  }
 
-  document.getElementById('resultsContainer').style.display = 'block';
-}
+    loadModel();
+
+    // 2. Manejar la lectura del archivo CSV
+    document.getElementById('csvFileInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: true,
+        complete: async function(results) {
+          await processPredictions(results.data);
+        }
+      });
+    });
+
+    // 3. Procesar datos, aplicar One-Hot y ejecutar inferencias solicitando únicamente el tensor de etiquetas
+    async function processPredictions(data) {
+      const tbody = document.querySelector('#resultsTable tbody');
+      tbody.innerHTML = '';
+
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        
+        // Obtener ID del jugador
+        const playerId = row['PlayerID'] !== undefined ? row['PlayerID'] : `Jugador #${i + 1}`;
+
+        // Mapear variables categóricas
+        const gender = String(row['Gender'] || '').trim();
+        const location = String(row['Location'] || '').trim();
+        const gameGenre = String(row['GameGenre'] || '').trim();
+        const gameDifficulty = String(row['GameDifficulty'] || '').trim();
+
+        // Arreglo con las 17 características en el orden exacto del entrenamiento con One-Hot Encoding
+        const inputValues = [
+          // 1-7: Numéricas directas
+          Number(row['Age']) || 0,
+          Number(row['PlayTimeHours']) || 0,
+          Number(row['InGamePurchases']) || 0,
+          Number(row['SessionsPerWeek']) || 0,
+          Number(row['AvgSessionDurationMinutes']) || 0,
+          Number(row['PlayerLevel']) || 0,
+          Number(row['AchievementsUnlocked']) || 0,
+
+          // 8: Gender_Male
+          (gender === 'Male' || gender === '1') ? 1 : 0,
+
+          // 9-11: Location (Europe, Other, USA)
+          (location === 'Europe' || location === '1') ? 1 : 0,
+          (location === 'Other' || location === '2') ? 1 : 0,
+          (location === 'USA' || location === '3') ? 1 : 0,
+
+          // 12-15: GameGenre (RPG, Simulation, Sports, Strategy)
+          (gameGenre === 'RPG' || gameGenre === '1') ? 1 : 0,
+          (gameGenre === 'Simulation' || gameGenre === '2') ? 1 : 0,
+          (gameGenre === 'Sports' || gameGenre === '3') ? 1 : 0,
+          (gameGenre === 'Strategy' || gameGenre === '4') ? 1 : 0,
+
+          // 16-17: GameDifficulty (Hard, Medium)
+          (gameDifficulty === 'Hard' || gameDifficulty === '1') ? 1 : 0,
+          (gameDifficulty === 'Medium' || gameDifficulty === '2') ? 1 : 0
+        ];
+
+        try {
+          // Crear Tensor con dimensión [1, 17]
+          const inputTensor = new ort.Tensor('float32', Float32Array.from(inputValues), [1, 17]);
+          
+          const feeds = {};
+          feeds[inputName] = inputTensor;
+
+          // Solicitamos únicamente la salida de etiqueta para ignorar la estructura no-tensorial de probabilidades
+          const outputMap = await session.run(feeds, [labelOutputName]);
+
+          const labelTensor = outputMap[labelOutputName];
+          let rawPrediction = labelTensor.data[0];
+
+          let predictedClass = typeof rawPrediction === 'bigint' ? Number(rawPrediction) : rawPrediction;
+          predictedClass = labelMapping[predictedClass] !== undefined ? labelMapping[predictedClass] : predictedClass;
+
+          const strategy = strategyMapping[predictedClass] || "Sin estrategia definida";
+
+          // Renderizar fila
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${playerId}</strong></td>
+            <td class="${predictedClass}">${predictedClass}</td>
+            <td>${strategy}</td>
+          `;
+          tbody.appendChild(tr);
+
+        } catch (err) {
+          console.error(`Error procesando la fila ${i + 1}:`, err);
+        }
+      }
+
+      document.getElementById('resultsContainer').style.display = 'block';
+    }
   </script>
 
 </body>
