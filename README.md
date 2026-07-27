@@ -27,54 +27,6 @@ del dispositivo de quien usa la herramienta.
 4. `app.js` arma el vector de features en el mismo orden que el modelo de
    Python, corre ambos modelos, y muestra el resultado.
 
-## Archivos
-
-```
-index.html          Página principal
-style.css            Estilos
-app.js               Lógica: encoding de features, inferencia, render de UI
-js/model_rf.js        Árbol de decisión exportado (clasificación de engagement)
-js/cluster_model.js    Centroides y metadatos de K-Means (segmentación)
-js/model_meta.js       Orden de features, mapeo de dummies, métricas de test
-sample_players.csv    CSV de ejemplo (12 jugadores) para probar el modo lote
-```
-
-## Cómo usarlo en local
-
-Abre `index.html` directamente en el navegador (doble clic) — no necesita
-servidor ni instalación. Si tu navegador bloquea `file://` para el CSV de
-ejemplo, corre un servidor local simple:
-
-```bash
-cd site
-python3 -m http.server 8000
-# abrir http://localhost:8000
-```
-
-## Cómo publicarlo en GitHub Pages
-
-1. Crea un repositorio nuevo en GitHub (o usa uno existente) y sube el
-   contenido de esta carpeta (`index.html`, `style.css`, `app.js`, `js/`,
-   `sample_players.csv`) a la raíz del repo (o a una carpeta `docs/`).
-2. En GitHub: **Settings → Pages**.
-3. En "Source" selecciona la rama (`main`) y la carpeta (`/root` o `/docs`,
-   según donde hayas subido los archivos).
-4. Guarda. GitHub te dará una URL tipo
-   `https://<tu-usuario>.github.io/<tu-repo>/` en 1-2 minutos.
-
-También puedes usar la [CLI de GitHub](https://cli.github.com/) o Git normal:
-
-```bash
-git init
-git add .
-git commit -m "Engagement Scanner - capstone"
-git branch -M main
-git remote add origin https://github.com/<tu-usuario>/<tu-repo>.git
-git push -u origin main
-```
-
-Luego activa Pages desde la configuración del repositorio como se explicó
-arriba.
 
 ## Formato esperado del CSV (modo lote)
 
