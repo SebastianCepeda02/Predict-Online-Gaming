@@ -146,56 +146,49 @@
       "Low": "Recompensas Diarias por Ingreso / Anuncios Bonificados (Rewarded Ads)"
     };
 
-    // 1. Cargar la sesión del modelo ONNX
-    async function loadModel() {
-      const statusDiv = document.getElementById('status');
-      try {
-        session = await ort.InferenceSession.create('./player_classifier.onnx');
-        statusDiv.innerText = "¡Modelo cargado exitosamente y listo para clasificar!";
-        statusDiv.className = "status ready";
-        document.getElementById('csvFileInput').disabled = false;
-      } catch (e) {
-        console.error("Error al cargar el modelo ONNX:", e);
-        statusDiv.innerText = "Error al cargar el modelo ONNX. Asegúrate de tener 'player_classifier.onnx' en el directorio raíz.";
-        statusDiv.className = "status error";
-      }
-    }
+    let session;
+let labelOutputName = null;
 
-    loadModel();
+// 1. Cargar el modelo e identificar el nombre real de la salida de clase
+async function loadModel() {
+  const statusDiv = document.getElementById('status');
+  try {
+    session = await ort.InferenceSession.create('./player_classifier.onnx');
+    
+    // Inspeccionar las salidas registradas en el archivo ONNX
+    console.log("Nombres de salida en el modelo ONNX:", session.outputNames);
+    
+    // La primera salida casi siempre es el label/clasificación (ej: 'label' o 'output_label')
+    // Filtramos para evitar seleccionar la de probabilidades
+    labelOutputName = session.outputNames.find(name => !name.includes('prob')) || session.outputNames[0];
+    console.log("Nombre de salida de etiqueta seleccionado:", labelOutputName);
 
-    // 2. Manejar la carga del archivo CSV
-    document.getElementById('csvFileInput').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
+    statusDiv.innerText = "¡Modelo cargado exitosamente y listo para clasificar!";
+    statusDiv.className = "status ready";
+    document.getElementById('csvFileInput').disabled = false;
+  } catch (e) {
+    console.error("Error al cargar el modelo ONNX:", e);
+    statusDiv.innerText = "Error al cargar el modelo ONNX. Asegúrate de tener 'player_classifier.onnx' en el directorio raíz.";
+    statusDiv.className = "status error";
+  }
+}
 
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        dynamicTyping: true,
-        complete: async function(results) {
-          await processPredictions(results.data);
-        }
-      });
-    });
-
-    // 3. Procesar datos y ejecutar inferencias con One-Hot Encoding automático
-    async function processPredictions(data) {
+// 2. Procesar las predicciones solicitando SOLO el tensor de etiqueta
+async function processPredictions(data) {
   const tbody = document.querySelector('#resultsTable tbody');
   tbody.innerHTML = '';
 
   for (let i = 0; i < data.length; i++) {
     const row = data[i];
     
-    // Obtener ID del jugador
     const playerId = row['PlayerID'] !== undefined ? row['PlayerID'] : `Jugador #${i + 1}`;
 
-    // Obtener valores categóricos para One-Hot Encoding
     const gender = String(row['Gender'] || '').trim();
     const location = String(row['Location'] || '').trim();
     const gameGenre = String(row['GameGenre'] || '').trim();
     const gameDifficulty = String(row['GameDifficulty'] || '').trim();
 
-    // Arreglo con las 17 características en el ORDEN EXACTO del modelo
+    // 17 características en el orden del modelo One-Hot
     const inputValues = [
       Number(row['Age']) || 0,
       Number(row['PlayTimeHours']) || 0,
@@ -226,12 +219,18 @@
 
     try {
       const inputTensor = new ort.Tensor('float32', Float32Array.from(inputValues), [1, 17]);
-      const feeds = { float_input: inputTensor };
+      
+      // Pasar el nombre de entrada detectado en la sesión (suele ser 'float_input')
+      const inputName = session.inputNames[0];
+      const feeds = {};
+      feeds[inputName] = inputTensor;
 
-      // Pasamos ['label'] para que ONNX ignora la salida de probabilidades
-      const outputMap = await session.run(feeds, ['label']);
+      // Solicitamos ÚNICAMENTE el nombre de la salida de etiquetas que descubrimos al cargar
+      const outputMap = await session.run(feeds, [labelOutputName]);
 
-      let rawPrediction = outputMap.label.data[0];
+      const labelTensor = outputMap[labelOutputName];
+      let rawPrediction = labelTensor.data[0];
+
       let predictedClass = typeof rawPrediction === 'bigint' ? Number(rawPrediction) : rawPrediction;
       predictedClass = labelMapping[predictedClass] !== undefined ? labelMapping[predictedClass] : predictedClass;
 
