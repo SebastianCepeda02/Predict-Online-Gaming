@@ -1,277 +1,164 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Predict Online Gaming - Clasificación y Monetización</title>
-  
-  <!-- Carga de la CDN oficial de ONNX Runtime Web -->
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
-  <!-- PapaParse para la lectura eficiente de archivos CSV -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-
-  <style>
-    body { 
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-      margin: 0; 
-      padding: 30px; 
-      background-color: #f4f7f6; 
-      color: #333; 
-    }
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
-    }
-    h1 { 
-      color: #2c3e50; 
-      text-align: center;
-      margin-bottom: 30px;
-    }
-    .card { 
-      background: #ffffff; 
-      padding: 25px; 
-      border-radius: 10px; 
-      box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
-      margin-bottom: 25px; 
-    }
-    table { 
-      width: 100%; 
-      border-collapse: collapse; 
-      margin-top: 15px; 
-    }
-    th, td { 
-      border: 1px solid #e2e8f0; 
-      padding: 12px; 
-      text-align: left; 
-    }
-    th { 
-      background-color: #3498db; 
-      color: white; 
-      font-weight: 600;
-    }
-    tr:nth-child(even) {
-      background-color: #f8fafc;
-    }
-    .status { 
-      font-weight: bold; 
-      padding: 12px 15px; 
-      border-radius: 6px; 
-      display: inline-block; 
-      margin-top: 5px;
-    }
-    .loading { 
-      background-color: #fef3c7; 
-      color: #d97706; 
-      border: 1px solid #fcd34d;
-    }
-    .ready { 
-      background-color: #d1fae5; 
-      color: #059669; 
-      border: 1px solid #6ee7b7;
-    }
-    .error {
-      background-color: #fee2e2;
-      color: #dc2626;
-      border: 1px solid #fca5a5;
-    }
-    .High { 
-      color: #059669; 
-      font-weight: bold; 
-    }
-    .Medium { 
-      color: #d97706; 
-      font-weight: bold; 
-    }
-    .Low { 
-      color: #dc2626; 
-      font-weight: bold; 
-    }
-    input[type="file"] {
-      padding: 10px;
-      border: 1px solid #cbd5e1;
-      border-radius: 6px;
-      width: 100%;
-      box-sizing: border-box;
-      background-color: #f8fafc;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Engagement Scanner — Clasificador de jugadores</title>
+<meta name="description" content="Clasifica jugadores por nivel de engagement y segmento de monetización, 100% en el navegador." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <div class="container">
-    <h1>🎮 Predict Online Gaming - Monetización de Jugadores</h1>
+<div class="scanlines" aria-hidden="true"></div>
 
-    <div class="card">
-      <h3>Estado del Modelo ONNX:</h3>
-      <div id="status" class="status loading">Inicializando motor y cargando modelo...</div>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">◎</span>
+      <div class="brand-text">
+        <h1>Engagement Scanner</h1>
+        <p>Clasificador de jugadores · segmentación para monetización</p>
+      </div>
     </div>
-
-    <div class="card">
-      <h3>Cargar archivo CSV de prueba</h3>
-      <input type="file" id="csvFileInput" accept=".csv" disabled />
-      <p style="color: #64748b; font-size: 0.9em; margin-top: 8px;">
-        * El CSV debe contener la columna <b>PlayerID</b> y las métricas numéricas/categóricas del jugador.
-      </p>
-    </div>
-
-    <div class="card" id="resultsContainer" style="display: none;">
-      <h3>Resultados de Clasificación y Estrategia</h3>
-      <table id="resultsTable">
-        <thead>
-          <tr>
-            <th>Player ID</th>
-            <th>Nivel de Engagement Predicho</th>
-            <th>Estrategia de Monetización Recomendada</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <div class="badge-local">
+      <span class="dot"></span>
+      Modelo corriendo en tu navegador — ningún dato sale de este dispositivo
     </div>
   </div>
+</header>
 
-  <script>
-    let session;
-    let inputName = null;
-    let labelOutputName = null;
+<main class="container">
 
-    // Configuración de WebAssembly para evitar problemas de proxy o hilos en navegadores
-    if (window.ort) {
-      ort.env.wasm.numThreads = 1;
-      ort.env.wasm.proxy = false;
-    }
+  <section class="panel intro">
+    <p>
+      Este clasificador usa un árbol de decisión entrenado sobre el
+      <em>Predict Online Gaming Behavior Dataset</em> (Kaggle, 40,034 jugadores) para predecir
+      el <strong>nivel de engagement</strong> (Low / Medium / High) de un jugador a partir de su
+      comportamiento, y lo cruza con un segmento de comportamiento (clustering) para sugerir
+      una <strong>acción de monetización</strong>. Precisión de referencia en test: <strong id="meta-accuracy">—</strong>.
+    </p>
+  </section>
 
-    // Mapeos de clases y estrategias
-    const labelMapping = { 0: "Low", 1: "Medium", 2: "High" };
-    const strategyMapping = {
-      "High": "Suscripción Pass VIP / Skins Exclusivas / Eventos Limitados",
-      "Medium": "Descuentos en Packs / Ofertas de tiempo limitado / Microtransacciones",
-      "Low": "Recompensas Diarias por Ingreso / Anuncios Bonificados (Rewarded Ads)"
-    };
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="single" role="tab" aria-selected="true">Un jugador</button>
+    <button class="tab" data-tab="batch" role="tab" aria-selected="false">Lote (CSV)</button>
+  </nav>
 
-    // 1. Cargar el modelo e inspeccionar los nombres de entradas/salidas
-    async function loadModel() {
-      const statusDiv = document.getElementById('status');
-      try {
-        session = await ort.InferenceSession.create('./player_classifier.onnx');
-        
-        // Obtener el nombre del nodo de entrada (ejemplo: 'float_input')
-        inputName = session.inputNames[0];
-        
-        // Identificar la salida que corresponde a las etiquetas/clases predichas
-        labelOutputName = session.outputNames.find(name => !name.includes('prob')) || session.outputNames[0];
+  <!-- ============ TAB: SINGLE PLAYER ============ -->
+  <section class="tab-panel active" id="panel-single">
+    <form id="single-form" class="player-form" autocomplete="off">
+      <div class="field">
+        <label for="f-age">Edad</label>
+        <input type="number" id="f-age" min="10" max="100" value="28" required>
+      </div>
+      <div class="field">
+        <label for="f-gender">Género</label>
+        <select id="f-gender">
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-location">Ubicación</label>
+        <select id="f-location">
+          <option value="USA">USA</option>
+          <option value="Europe">Europe</option>
+          <option value="Asia">Asia</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-genre">Género de juego</label>
+        <select id="f-genre">
+          <option value="Action">Action</option>
+          <option value="RPG">RPG</option>
+          <option value="Simulation">Simulation</option>
+          <option value="Sports">Sports</option>
+          <option value="Strategy">Strategy</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-difficulty">Dificultad</label>
+        <select id="f-difficulty">
+          <option value="Easy">Easy</option>
+          <option value="Medium">Medium</option>
+          <option value="Hard">Hard</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-purchases">Compras in-game</label>
+        <select id="f-purchases">
+          <option value="0">No</option>
+          <option value="1">Sí</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="f-playtime">Horas de juego (prom.)</label>
+        <input type="number" id="f-playtime" min="0" max="24" step="0.1" value="12">
+      </div>
+      <div class="field">
+        <label for="f-sessions">Sesiones / semana</label>
+        <input type="number" id="f-sessions" min="0" max="40" value="9">
+      </div>
+      <div class="field">
+        <label for="f-duration">Duración sesión (min)</label>
+        <input type="number" id="f-duration" min="0" max="300" value="95">
+      </div>
+      <div class="field">
+        <label for="f-level">Nivel del jugador</label>
+        <input type="number" id="f-level" min="1" max="200" value="40">
+      </div>
+      <div class="field">
+        <label for="f-achievements">Logros desbloqueados</label>
+        <input type="number" id="f-achievements" min="0" max="200" value="25">
+      </div>
 
-        console.log("Entrada detectada:", inputName);
-        console.log("Salida de etiqueta seleccionada:", labelOutputName);
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">Clasificar jugador</button>
+        <button type="button" class="btn-ghost" id="btn-sample">Cargar ejemplo aleatorio</button>
+      </div>
+    </form>
 
-        statusDiv.innerText = "¡Modelo cargado exitosamente y listo para clasificar!";
-        statusDiv.className = "status ready";
-        document.getElementById('csvFileInput').disabled = false;
-      } catch (e) {
-        console.error("Error al cargar el modelo ONNX:", e);
-        statusDiv.innerText = "Error al cargar el modelo ONNX. Asegúrate de tener 'player_classifier.onnx' en la raíz del repositorio.";
-        statusDiv.className = "status error";
-      }
-    }
+    <div id="single-result-wrap"></div>
+  </section>
 
-    loadModel();
+  <!-- ============ TAB: BATCH CSV ============ -->
+  <section class="tab-panel" id="panel-batch">
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="csv-input" accept=".csv" hidden>
+      <div class="dropzone-inner">
+        <span class="dz-icon">⇪</span>
+        <p><strong>Arrastra un CSV</strong> o haz clic para seleccionar un archivo</p>
+        <p class="dz-hint">
+          Columnas esperadas: Age, Gender, Location, GameGenre, PlayTimeHours,
+          InGamePurchases, GameDifficulty, SessionsPerWeek, AvgSessionDurationMinutes,
+          PlayerLevel, AchievementsUnlocked
+        </p>
+        <a href="sample_players.csv" download class="dz-sample-link">Descargar CSV de ejemplo</a>
+      </div>
+    </div>
 
-    // 2. Manejar la lectura del archivo CSV
-    document.getElementById('csvFileInput').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
+    <div id="batch-summary"></div>
+    <div id="batch-result-wrap"></div>
+  </section>
 
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        dynamicTyping: true,
-        complete: async function(results) {
-          await processPredictions(results.data);
-        }
-      });
-    });
+</main>
 
-    // 3. Procesar datos, aplicar One-Hot y ejecutar inferencias solicitando únicamente el tensor de etiquetas
-    async function processPredictions(data) {
-      const tbody = document.querySelector('#resultsTable tbody');
-      tbody.innerHTML = '';
+<footer class="footer">
+  <p>
+    Modelo: árbol de decisión (max_depth=16, min_samples_leaf=15) exportado a JavaScript puro —
+    sin backend, sin envío de datos. Segmentación: K-Means (k=3) sobre variables de comportamiento.
+    Proyecto Capstone — Segmentación y Clasificación de Jugadores.
+  </p>
+</footer>
 
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i];
-        
-        // Obtener ID del jugador
-        const playerId = row['PlayerID'] !== undefined ? row['PlayerID'] : `Jugador #${i + 1}`;
-
-        // Mapear variables categóricas
-        const gender = String(row['Gender'] || '').trim();
-        const location = String(row['Location'] || '').trim();
-        const gameGenre = String(row['GameGenre'] || '').trim();
-        const gameDifficulty = String(row['GameDifficulty'] || '').trim();
-
-        // Arreglo con las 17 características en el orden exacto del entrenamiento con One-Hot Encoding
-        const inputValues = [
-          // 1-7: Numéricas directas
-          Number(row['Age']) || 0,
-          Number(row['PlayTimeHours']) || 0,
-          Number(row['InGamePurchases']) || 0,
-          Number(row['SessionsPerWeek']) || 0,
-          Number(row['AvgSessionDurationMinutes']) || 0,
-          Number(row['PlayerLevel']) || 0,
-          Number(row['AchievementsUnlocked']) || 0,
-
-          // 8: Gender_Male
-          (gender === 'Male' || gender === '1') ? 1 : 0,
-
-          // 9-11: Location (Europe, Other, USA)
-          (location === 'Europe' || location === '1') ? 1 : 0,
-          (location === 'Other' || location === '2') ? 1 : 0,
-          (location === 'USA' || location === '3') ? 1 : 0,
-
-          // 12-15: GameGenre (RPG, Simulation, Sports, Strategy)
-          (gameGenre === 'RPG' || gameGenre === '1') ? 1 : 0,
-          (gameGenre === 'Simulation' || gameGenre === '2') ? 1 : 0,
-          (gameGenre === 'Sports' || gameGenre === '3') ? 1 : 0,
-          (gameGenre === 'Strategy' || gameGenre === '4') ? 1 : 0,
-
-          // 16-17: GameDifficulty (Hard, Medium)
-          (gameDifficulty === 'Hard' || gameDifficulty === '1') ? 1 : 0,
-          (gameDifficulty === 'Medium' || gameDifficulty === '2') ? 1 : 0
-        ];
-
-        try {
-          // Crear Tensor con dimensión [1, 17]
-          const inputTensor = new ort.Tensor('float32', Float32Array.from(inputValues), [1, 17]);
-          
-          const feeds = {};
-          feeds[inputName] = inputTensor;
-
-          // Solicitamos únicamente la salida de etiqueta para ignorar la estructura no-tensorial de probabilidades
-          const outputMap = await session.run(feeds, [labelOutputName]);
-
-          const labelTensor = outputMap[labelOutputName];
-          let rawPrediction = labelTensor.data[0];
-
-          let predictedClass = typeof rawPrediction === 'bigint' ? Number(rawPrediction) : rawPrediction;
-          predictedClass = labelMapping[predictedClass] !== undefined ? labelMapping[predictedClass] : predictedClass;
-
-          const strategy = strategyMapping[predictedClass] || "Sin estrategia definida";
-
-          // Renderizar fila
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td><strong>${playerId}</strong></td>
-            <td class="${predictedClass}">${predictedClass}</td>
-            <td>${strategy}</td>
-          `;
-          tbody.appendChild(tr);
-
-        } catch (err) {
-          console.error(`Error procesando la fila ${i + 1}:`, err);
-        }
-      }
-
-      document.getElementById('resultsContainer').style.display = 'block';
-    }
-  </script>
-
+<script src="js/model_rf.js"></script>
+<script src="js/cluster_model.js"></script>
+<script src="js/model_meta.js"></script>
+<script src="js/papaparse.min.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

@@ -1,0 +1,13 @@
+Age,Gender,Location,GameGenre,PlayTimeHours,InGamePurchases,GameDifficulty,SessionsPerWeek,AvgSessionDurationMinutes,PlayerLevel,AchievementsUnlocked
+21,Female,Europe,Strategy,6.326390755445413,1,Medium,14,177,66,8
+27,Male,Asia,Strategy,20.915263785808133,0,Easy,1,109,17,10
+48,Male,USA,RPG,7.248337518768551,0,Medium,11,149,43,5
+28,Female,USA,RPG,15.457535462218786,1,Easy,15,69,31,10
+47,Female,Europe,Sports,5.040060177744808,1,Medium,9,39,66,22
+31,Male,Other,Strategy,11.776974630925553,0,Easy,18,48,63,3
+38,Female,Asia,Action,14.837291409079224,0,Medium,15,41,51,48
+29,Male,Other,Simulation,21.56192610699814,1,Medium,3,113,66,24
+48,Male,USA,RPG,6.780551748478358,0,Easy,15,105,37,45
+37,Male,Europe,RPG,18.127892210177336,0,Easy,3,91,28,35
+17,Male,Europe,Simulation,4.934226020639327,0,Easy,15,107,5,48
+35,Female,Europe,RPG,8.716112200210311,0,Hard,12,74,91,23
